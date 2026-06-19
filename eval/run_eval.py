@@ -136,18 +136,22 @@ def main() -> None:
     pipe = build_pipeline(s)
     if args.no_semantic_cache:
         pipe.cache.semantic_enabled = False
+    # mock embeddings have no real rate limit — throttling them only wastes time.
+    # Only respect --rpm when actually hitting the real Voyage API.
+    effective_rpm = args.rpm if not pipe.embedder.is_mock else 0
     judge_model = s.get("models", "generation", "judge_model")
     items = load_eval(s.get("paths", "eval_dataset"))
     print(f"[eval] {len(items)} items | judge={judge_model} | light={args.light} | "
-          f"llm_mock={pipe.llm.is_mock} embed_mock={pipe.embedder.is_mock}\n")
+          f"llm_mock={pipe.llm.is_mock} embed_mock={pipe.embedder.is_mock} | "
+          f"rpm={effective_rpm}{' (forced 0: mock embedder)' if pipe.embedder.is_mock and args.rpm else ''}\n")
 
     results = []
     for name in args.configs:
         cfg = CONFIGS[name]
         throttle = 0.0
-        if args.rpm > 0:
+        if effective_rpm > 0:
             calls = voyage_calls_per_item(cfg)
-            throttle = calls * (60.0 / args.rpm) * 1.05  # 5% safety margin
+            throttle = calls * (60.0 / effective_rpm) * 1.05  # 5% safety margin
         # fresh cache per config so cache hits don't skew cross-config latency
         pipe.cache.hits = pipe.cache.misses = 0
         pipe.cache._store.clear()

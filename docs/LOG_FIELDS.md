@@ -7,6 +7,10 @@
 Structured logs are **JSON Lines** (one event per line), written to stdout and `logs/service.jsonl`.
 Every payload is **PII-redacted** before emission. All events of one QA request share a `trace_id`.
 
+> `docs/sample_logs.jsonl` 取自真实评估运行(真实 Voyage 检索 + 真实 Claude 生成,`is_mock: false`),
+> 含一次正常作答、一次低置信拒答、一次注入拒答;唯一例外是 `cache.hit` 示例——评估期关闭了语义缓存
+> 以节省 Voyage 配额,没有产生真实命中,该行为手工构造的格式示例,**如实标注**。
+
 ## 公共字段 / Common fields (every line)
 
 | 字段 field | 类型 type | 说明 description |
