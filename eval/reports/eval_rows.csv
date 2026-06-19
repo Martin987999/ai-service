@@ -1,0 +1,57 @@
+id,config,refused,out_of_scope,confidence,latency_ms,answer
+q1,vector,False,False,0.6575,2969.07,入职满五年每年享有 15 天带薪年假。[来源: handbook-leave-zh]
+q2,vector,False,False,0.6016,3419.35,"每周最多可申请 2 天远程办公,需提前在 OA 登记。[来源: handbook-remote-zh]
+
+注:涉及核心机密数据的岗位不适用;远程期间须使用公司 VPN 接入内网并保持即时通讯在线。[来源: handbook-remote-zh]"
+q3,vector,False,False,0.6586,2896.44,"对外 API 的访问令牌有效期为 2 小时。
+
+该令牌基于 OAuth 2.0 客户端凭证模式签发,通过 Authorization: Bearer 头传递。[来源: techspec-api-auth-zh]"
+q4,vector,False,False,0.5646,3225.98,"敏感个人信息须加密存储。
+
+要点:
+- 加密存储(适用于身份证号、银行卡号、生物识别等)。
+- 访问需走审批并留痕。 [来源: compliance-pii-zh]"
+q5,vector,False,False,0.5787,1841.71,"未休年假最多可结转 5 天至次年第一季度,逾期作废。[来源: handbook-leave-zh]"
+q6,vector,False,False,0.5755,1954.92,20 paid leave days per year after ten years of service [source: handbook-leave-en].
+q7,vector,False,False,0.5159,2719.88,"The API access token is transmitted via the `Authorization: Bearer` header [source: techspec-api-auth-en].
+
+Additional details: the tokens are OAuth 2.0 client-credentials access tokens valid for 2 hours, and the server validates token signature and scope on every request [source: techspec-api-auth-en]."
+q8,vector,False,False,0.4747,2371.91,The retrieval layer uses RRF (Reciprocal Rank Fusion) to fuse FAISS vector search with BM25 lexical search [source: arch-rag-en].
+q9,vector,True,True,0.1469,1298.61,"抱歉,我无法基于现有知识库可靠地回答该问题。建议:① 换用更具体的关键词;② 确认该问题属于内部知识库范围;③ 联系对应业务负责人。"
+q10,vector,True,True,0.2061,265.16,"Sorry, I cannot answer this reliably from the current knowledge base. Suggestions: (1) try more specific keywords; (2) confirm the question is in scope of the internal KB; (3) contact the responsible owner."
+q1,hybrid,False,False,0.6575,32817.33,入职满五年每年享有 15 天带薪年假。[来源: handbook-leave-zh]
+q2,hybrid,False,False,0.6016,2858.9,"每周最多可申请 2 天远程办公,需提前在 OA 登记。[来源: handbook-remote-zh]"
+q3,hybrid,False,False,0.6586,3652.16,"对外 API 访问令牌有效期为 2 小时。
+
+要点:
+- 采用 OAuth 2.0 客户端凭证模式签发的访问令牌(access token)
+- 通过 Authorization: Bearer 头传递
+- 服务端对每个请求校验令牌签名与作用域(scope),超限返回 429
+
+[来源: techspec-api-auth-zh]"
+q4,hybrid,False,False,0.5646,2911.51,"敏感个人信息(如身份证号、银行卡号、生物识别)须加密存储,访问需走审批并留痕。[来源: compliance-pii-zh]"
+q5,hybrid,False,False,0.5787,2801.25,"未休年假最多可结转 5 天至次年第一季度,逾期作废。[来源: handbook-leave-zh]"
+q6,hybrid,False,False,0.5755,2284.43,20 days of annual leave after ten years of service [source: handbook-leave-en].
+q7,hybrid,False,False,0.5159,2065.16,The API access token is passed via the `Authorization: Bearer` header [source: techspec-api-auth-en]. The server validates the token's signature and scope on every request [source: techspec-api-auth-en].
+q8,hybrid,False,False,0.4747,2854.65,The retrieval layer uses RRF (Reciprocal Rank Fusion) to fuse FAISS vector search with BM25 lexical search [source: arch-rag-en].
+q9,hybrid,True,True,0.1469,427.18,"抱歉,我无法基于现有知识库可靠地回答该问题。建议:① 换用更具体的关键词;② 确认该问题属于内部知识库范围;③ 联系对应业务负责人。"
+q10,hybrid,True,True,0.2061,281.38,"Sorry, I cannot answer this reliably from the current knowledge base. Suggestions: (1) try more specific keywords; (2) confirm the question is in scope of the internal KB; (3) contact the responsible owner."
+q1,hybrid_rerank,False,False,0.832,3155.66,入职满五年每年享有 15 天带薪年假。[来源: handbook-leave-zh]
+q2,hybrid_rerank,False,False,0.8984,2364.37,"每周最多可申请 2 天远程办公,需提前在 OA 登记。[来源: handbook-remote-zh]"
+q3,hybrid_rerank,False,False,0.8555,4240.92,"对外 API 的访问令牌有效期为 2 小时。
+
+要点:
+- 采用 OAuth 2.0 客户端凭证模式签发访问令牌
+- 令牌通过 Authorization: Bearer 头传递
+- 服务端校验令牌签名与作用域,超限返回 429 [来源: techspec-api-auth-zh]"
+q4,hybrid_rerank,False,False,0.7969,2928.86,"敏感个人信息(如身份证号、银行卡号、生物识别)须加密存储,访问需走审批并留痕。[来源: compliance-pii-zh]"
+q5,hybrid_rerank,False,False,0.7969,2784.0,"未休年假最多可结转 5 天至次年第一季度,逾期作废。[来源: handbook-leave-zh]"
+q6,hybrid_rerank,False,False,0.8164,2013.56,20 paid leave days per year after ten years of service [source: handbook-leave-en].
+q7,hybrid_rerank,False,False,0.7148,5381.83,"The API access token is transmitted via the `Authorization: Bearer` header [source: techspec-api-auth-en].
+
+Key points:
+- Tokens are OAuth 2.0 client-credentials access tokens, valid for 2 hours [source: techspec-api-auth-en].
+- The server validates token signature and scope on every request [source: techspec-api-auth-en]."
+q8,hybrid_rerank,False,False,0.7227,3084.27,The retrieval layer uses RRF (Reciprocal Rank Fusion) to fuse FAISS vector search with BM25 lexical search [source: arch-rag-en].
+q9,hybrid_rerank,True,True,0.4062,740.99,"抱歉,我无法基于现有知识库可靠地回答该问题。建议:① 换用更具体的关键词;② 确认该问题属于内部知识库范围;③ 联系对应业务负责人。"
+q10,hybrid_rerank,True,True,0.3203,903.24,"Sorry, I cannot answer this reliably from the current knowledge base. Suggestions: (1) try more specific keywords; (2) confirm the question is in scope of the internal KB; (3) contact the responsible owner."

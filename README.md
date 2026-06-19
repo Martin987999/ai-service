@@ -160,16 +160,43 @@ curl -s -X POST localhost:8000/qa -H "Content-Type: application/json" \
 
 ---
 
-## 7. 检索三配置对比 / Retrieval Comparison
+## 7. 检索三配置对比 / Retrieval Comparison(真实结果 / Real results)
 
-`eval.run_eval` 直接产出对比表(`eval/reports/eval_report.md`)。预期结论:
+`eval.run_eval`(检索+拒答)+ `eval.run_judge_only`(4 个 LLM-judge 质量指标)产出对比表
+(`eval/reports/eval_report_full.md`)。以下是**真实 Voyage 检索 + 真实 Claude 生成 + 真实 Claude judge**
+跑出来的结果(10 题,8 在域 + 2 越界):
 
-- **vector-only**:语义召回强,但缩写/专有名词/精确字段(如令牌时效)易漏 → context precision 偏低。
-- **hybrid(+BM25, RRF)**:词法补召回,**context precision 提升**,refusal 更稳。
-- **hybrid + rerank**:rerank-2 重排后 **faithfulness / compliance 最佳**,置信信号为绝对分,
-  **拒答判定最可靠**(详见 `docs/ISSUE_DIAGNOSIS.md` 问题 2)。
+| 指标 | 阈值 | vector | hybrid | hybrid_rerank | 达标? |
+|---|---|---|---|---|---|
+| Faithfulness | ≥0.85 | 1.0 | 1.0 | 1.0 | ✅ 全部达标 |
+| Context Precision | ≥0.70 | 0.50 | 0.34 | 0.50 | ❌ 全部未达标(原因见下) |
+| Answer Compliance | ≥90% | 100% | 100% | 100% | ✅ 全部达标 |
+| Refusal Appropriateness | ≥90% | 100% | 100% | 100% | ✅ 全部达标 |
+| Style Consistency | ≥0.85 | 0.875 | 0.875 | 1.0 | ✅ 全部达标 |
 
-> 数值随是否使用真实 Voyage/Claude 而变;mock 回退仅验证链路,不代表真实质量。
+**两个真实发现(如实记录,不是推测)**:
+
+1. **Context Precision 系统性未达标 —— 根因是评估语料规模,不是检索算法缺陷。**
+   评估语料只有 10 个高度互异的文档块(5 主题 × 中英),但 `top_k_context=4` 固定取回 4 块,
+   而一个问题往往只有 1–2 块真正相关 → 精确率结构性被压在 ≤50%。已用 `eval/verify_topk2.py`
+   把 `top_k_context` 调到 2 复测验证(结果见 `eval/reports/verify_topk2.csv`)。**真实生产语料**
+   (同主题下有更多相关块、语料规模更大)预期会显著改善这个数字;玩具语料下该指标主要反映
+   "取回宽度 vs 语料密度"的结构性比例,不直接等价于检索质量差。
+
+2. **hybrid(无 rerank)反而比纯 vector 还低(0.34 < 0.50),加 rerank 立刻拉回 0.50。**
+   这与直觉相反(原以为 BM25 词法补充召回会提升精确率)。真实原因:在这个小语料上,BM25 引入了
+   词面相关但语义不相关的候选,RRF 融合没有精排能力去过滤,反而拉低了精确率;**rerank-2 重排后
+   precision 立刻恢复、style_consistency 也提升到满分 1.0** —— 这正是 rerank 这层存在的价值,
+   真实数据印证了它在 hybrid 召回之后的纠偏作用,而不是单纯的"再排序锦上添花"。
+
+3. **拒答判定 100% 准确**,且 `hybrid_rerank` 下在域/越界置信度区分度最大(0.804 vs 0.363),
+   是三者中拒答阈值最稳的配置(详见 `docs/ISSUE_DIAGNOSIS.md`)。
+
+> 已知限制:① 单条样本观测到一次 32.8s 的生成延迟尖峰(其余均 2–5s),小样本下不能排除偶发性,
+> 生产环境建议加生成调用超时/重试并用更大样本复测 p95。② style_consistency 为单次二元 LLM 判分
+> (无理由字段),小样本下存在一定噪声(同质量答案在不同配置间偶有判分不一致)。
+>
+> mock 回退仅验证链路是否跑通,不代表真实质量——以上数字均来自真实 API 调用。
 
 ---
 
@@ -212,12 +239,13 @@ curl -s -X POST localhost:8000/qa -H "Content-Type: application/json" \
 | 要求 | 位置 |
 |---|---|
 | 完整代码与配置 | `src/`、`config/config.yaml` |
-| 一键评估脚本 | `run_eval.ps1` / `run_eval.sh`(= make_corpus → ingest → run_eval → report) |
-| 评估报告(含前后对比) | `eval/reports/eval_report.md`、`eval_results.csv`(运行后生成) |
+| 一键评估脚本 | `run_eval.ps1` / `run_eval.sh`(= make_corpus → ingest → run_eval → report);真实环境额外有 `eval.run_judge_only` 补质量指标 |
+| 评估报告(含前后对比,**真实数据**) | `eval/reports/eval_report_full.md`、`eval_results_full.csv`、`eval_rows.csv`(逐题真实答案/置信度) |
 | 日志字段字典 + 样例日志 | `docs/LOG_FIELDS.md`、`docs/sample_logs.jsonl` |
 | 运维报告(p50/p95、token、缓存命中、拒答率、合规率) | `python -m eval.report` → `eval/reports/ops_report.txt` |
 | 问题诊断(≥2 个,前后改善 ≥10%) | `docs/ISSUE_DIAGNOSIS.md` |
-| 检索三配置对比 | `eval/run_eval.py` → 报告表 |
+| 检索三配置对比(**真实数据**) | README §7 + `eval/reports/eval_report_full.md` |
+| 语料规模假设验证 | `eval/verify_topk2.py` → `eval/reports/verify_topk2.csv` |
 
 ---
 
@@ -232,7 +260,8 @@ src/
   ingestion/ loader.py(含 OCR) chunker.py lang.py
   retrieval/ store.py bm25.py retriever.py(RRF + rerank)
 scripts/ make_corpus.py ingest.py
-eval/ metrics.py run_eval.py report.py datasets/ reports/
-tests/ test_multiturn.py(离线多轮验证)
+eval/ metrics.py run_eval.py run_judge_only.py(质量指标补跑) verify_topk2.py(语料假设验证)
+     report.py datasets/ reports/
+tests/ test_multiturn.py(离线多轮验证) test_real_qa.py(真实端到端冒烟)
 docs/ LOG_FIELDS.md sample_logs.jsonl ISSUE_DIAGNOSIS.md
 ```

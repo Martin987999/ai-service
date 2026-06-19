@@ -1,0 +1,4 @@
+config,context_precision_k4_real,context_precision_k2
+vector,0.5,1.0
+hybrid,0.3438,0.5625
+hybrid_rerank,0.5,1.0
