@@ -1,0 +1,33 @@
+# ---- Core service ----
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+PyYAML==6.0.2
+
+# ---- LLM + Embeddings (online) ----
+anthropic==0.69.0          # Claude generation / LLM-as-judge
+voyageai==0.3.2            # Voyage embeddings + reranker (Anthropic-recommended)
+
+# ---- Retrieval ----
+faiss-cpu==1.9.0           # vector index (vector-only mode)
+rank-bm25==0.2.2           # lexical index (hybrid mode)
+numpy==1.26.4
+
+# ---- Ingestion (incl. scanned PDF OCR) ----
+pypdf==5.1.0
+pdfplumber==0.11.4
+pytesseract==0.3.13        # OCR for scanned PDFs (needs system tesseract)
+pdf2image==1.17.0          # rasterize scanned pages (needs system poppler)
+Pillow==11.0.0
+
+# ---- Observability / utils ----
+# NOTE: token accounting uses Anthropic usage / count_tokens — NOT tiktoken (wrong tokenizer for Claude).
+tenacity==9.0.0
+httpx==0.28.1
+
+# ---- Eval / report ----
+pandas==2.2.3
+
+# ---- Dataset download (optional, for make_corpus.py) ----
+datasets==3.2.0 ; python_version >= "3.9"

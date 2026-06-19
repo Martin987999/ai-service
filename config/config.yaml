@@ -1,0 +1,102 @@
+# ============================================================
+#  RAG QA Service — central configuration
+#  检索模式、重排开关、模型版本均在此配置,改配置不改代码。
+# ============================================================
+
+service:
+  name: "bilingual-rag-qa"
+  # 单实例并发上限(对应全局约束:单实例 >=5 并发)
+  max_concurrency: 8
+  # 端到端软超时(秒)。约束:90% 请求 < 10s
+  request_timeout_s: 10
+
+# ---------- Models / 模型选型 ----------
+models:
+  # 生成模型。详见 README「模型选型与成本」。
+  #   answer:  默认主答模型(质量优先,Opus 4.8)
+  #   judge:   LLM-as-judge 评估模型(与主答解耦,避免自评偏差,用 Sonnet 控成本)
+  #   cheap:   高并发/简单意图分类、改写等(Haiku 4.5)
+  generation:
+    answer_model: "claude-opus-4-8"      # $5 / $25 per 1M tok
+    judge_model: "claude-sonnet-4-6"     # $3 / $15 per 1M tok
+    cheap_model: "claude-haiku-4-5"      # $1 / $5  per 1M tok
+    max_tokens: 1024
+    effort: "medium"                     # low|medium|high|max — 成本/质量平衡
+  embedding:
+    model: "voyage-3"                    # 多语言,1024 维,适配中英混合
+    dim: 1024
+    batch_size: 64
+  reranker:
+    model: "rerank-2"                    # Voyage 重排
+
+# ---------- Retrieval / 检索控制 ----------
+retrieval:
+  # 检索模式:  vector  |  hybrid
+  #   vector : 仅向量召回(FAISS)
+  #   hybrid : 向量 + BM25 词法,RRF 融合
+  mode: "hybrid"
+
+  # 重排开关:true 时在召回后用 Voyage rerank-2 重排(改配置即可启停,无需改代码)
+  reranker_enabled: true
+
+  # 各阶段候选数
+  top_k_vector: 20        # 向量初召回
+  top_k_bm25: 20          # BM25 初召回
+  top_k_fused: 12         # 融合后保留
+  top_k_rerank: 6         # 重排后保留
+  top_k_context: 4        # 最终进入 prompt 的上下文条数
+
+  # RRF 融合常数
+  rrf_k: 60
+
+  # 置信度门限:绝对置信(rerank 分 或 原始 cosine)低于此值 → 低置信 → 拒答。
+  # 基于真实 voyage rerank-2 标定:in-scope ≈ 0.82,out-of-scope ≈ 0.31 → 取 0.45 可清晰区分。
+  # (实测见对话/诊断;换检索或重排模型后需重新标定 —— 见 docs/ISSUE_DIAGNOSIS.md 问题 2)
+  min_confidence: 0.45
+
+# ---------- Chunking / 切分 ----------
+chunking:
+  chunk_size: 700          # 字符数(中英混合按字符切更稳)
+  chunk_overlap: 120
+  min_chunk_chars: 80
+
+# ---------- Cache / 缓存 ----------
+cache:
+  enabled: true
+  # 精确缓存:对 (normalized_query + retrieval_mode + rerank) 做哈希命中
+  exact_ttl_s: 3600
+  max_entries: 5000
+  # 语义缓存:embedding 余弦相似度 >= 阈值视为命中(复用已有答案)
+  semantic_enabled: true
+  semantic_threshold: 0.95
+
+# ---------- Session / 多轮会话 ----------
+session:
+  max_turns: 12        # 每会话保留的最近轮数(user+assistant 计)
+  ttl_s: 3600          # 会话空闲过期
+  max_sessions: 2000   # 内存中最大会话数(LRU)
+
+# ---------- Safety / 安全 ----------
+safety:
+  prompt_injection_defense: true
+  pii_redaction_outputs: true      # 对输出做 PII 脱敏
+  pii_redaction_logs: true         # 对日志做 PII 脱敏
+  # 强制答案严格基于检索上下文(grounding)
+  strict_grounding: true
+  refusal_message_zh: "抱歉,我无法基于现有知识库可靠地回答该问题。建议:① 换用更具体的关键词;② 确认该问题属于内部知识库范围;③ 联系对应业务负责人。"
+  refusal_message_en: "Sorry, I cannot answer this reliably from the current knowledge base. Suggestions: (1) try more specific keywords; (2) confirm the question is in scope of the internal KB; (3) contact the responsible owner."
+
+# ---------- Paths ----------
+paths:
+  corpus_dir: "data/corpus"
+  index_dir: "data/index"
+  logs_dir: "logs"
+  eval_dataset: "eval/datasets/qa_eval.jsonl"
+  report_dir: "eval/reports"
+
+# ---------- Logging ----------
+logging:
+  level: "INFO"
+  # 结构化 JSON 日志,字段字典见 docs/LOG_FIELDS.md
+  json: true
+  file: "logs/service.jsonl"
