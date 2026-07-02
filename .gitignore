@@ -15,6 +15,8 @@ eval/reports/
 
 # keep corpus + eval dataset out of VCS by default (regenerate via scripts)
 data/corpus/
+data/corpus_large/
+data/_tmp_*/
 eval/datasets/
 
 # OS

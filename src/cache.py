@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import threading
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
@@ -43,42 +44,49 @@ class AnswerCache:
         self._store: "OrderedDict[str, CacheEntry]" = OrderedDict()
         self.hits = 0
         self.misses = 0
+        # re-entrant: get() calls _evict_expired() while holding the lock.
+        # Without this, concurrent put()/get() iterating _store raises
+        # "dictionary changed size during iteration" under ≥2 threads.
+        self._lock = threading.RLock()
 
     def get(self, key: str, query_vec: np.ndarray | None = None) -> tuple[dict | None, str]:
         """Returns (value, hit_type) where hit_type ∈ exact|semantic|miss."""
         if not self.enabled:
             return None, "miss"
-        self._evict_expired()
-        # exact
-        entry = self._store.get(key)
-        if entry is not None:
-            self._store.move_to_end(key)
-            self.hits += 1
-            return entry.value, "exact"
-        # semantic
-        if self.semantic_enabled and query_vec is not None:
-            best, best_sim = None, -1.0
-            for e in self._store.values():
-                if e.vec is None:
-                    continue
-                sim = float(np.dot(e.vec, query_vec))
-                if sim > best_sim:
-                    best, best_sim = e, sim
-            if best is not None and best_sim >= self.semantic_threshold:
+        with self._lock:
+            self._evict_expired()
+            # exact
+            entry = self._store.get(key)
+            if entry is not None:
+                self._store.move_to_end(key)
                 self.hits += 1
-                return {**best.value, "_semantic_sim": round(best_sim, 4)}, "semantic"
-        self.misses += 1
-        return None, "miss"
+                return entry.value, "exact"
+            # semantic
+            if self.semantic_enabled and query_vec is not None:
+                best, best_sim = None, -1.0
+                for e in self._store.values():
+                    if e.vec is None:
+                        continue
+                    sim = float(np.dot(e.vec, query_vec))
+                    if sim > best_sim:
+                        best, best_sim = e, sim
+                if best is not None and best_sim >= self.semantic_threshold:
+                    self.hits += 1
+                    return {**best.value, "_semantic_sim": round(best_sim, 4)}, "semantic"
+            self.misses += 1
+            return None, "miss"
 
     def put(self, key: str, value: dict, query_vec: np.ndarray | None = None) -> None:
         if not self.enabled:
             return
-        self._store[key] = CacheEntry(value=value, ts=time.time(), vec=query_vec)
-        self._store.move_to_end(key)
-        while len(self._store) > self.max_entries:
-            self._store.popitem(last=False)
+        with self._lock:
+            self._store[key] = CacheEntry(value=value, ts=time.time(), vec=query_vec)
+            self._store.move_to_end(key)
+            while len(self._store) > self.max_entries:
+                self._store.popitem(last=False)
 
     def _evict_expired(self) -> None:
+        # caller must hold self._lock
         now = time.time()
         stale = [k for k, e in self._store.items() if now - e.ts > self.ttl_s]
         for k in stale:
@@ -90,5 +98,6 @@ class AnswerCache:
         return self.hits / total if total else 0.0
 
     def stats(self) -> dict:
-        return {"hits": self.hits, "misses": self.misses, "hit_rate": round(self.hit_rate, 4),
-                "size": len(self._store)}
+        with self._lock:
+            return {"hits": self.hits, "misses": self.misses, "hit_rate": round(self.hit_rate, 4),
+                    "size": len(self._store)}

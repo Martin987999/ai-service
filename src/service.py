@@ -31,12 +31,17 @@ _semaphore = asyncio.Semaphore(_max_conc)
 app = FastAPI(title=settings.get("service", "name", default="bilingual-rag-qa"))
 
 # ---- lightweight rolling metrics (for /metrics and ops report) ----
+import threading
+
 _METRICS = {
     "requests": 0, "refusals": 0, "errors": 0,
     "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0,
     "latencies_ms": [],  # capped
 }
 _LAT_CAP = 5000
+# guards _METRICS: _record() runs on the event loop, but the sync /metrics endpoint
+# runs in FastAPI's threadpool and sorts latencies_ms — concurrent mutation otherwise.
+_metrics_lock = threading.Lock()
 
 
 class Msg(BaseModel):
@@ -82,7 +87,8 @@ async def qa(req: QARequest):
                                         session_id=req.session_id, history=hist),
             )
         except Exception as e:
-            _METRICS["errors"] += 1
+            with _metrics_lock:
+                _METRICS["errors"] += 1
             return {"error": str(e)}
         _record(resp)
         return resp.__dict__
@@ -90,33 +96,36 @@ async def qa(req: QARequest):
 
 @app.get("/metrics")
 def metrics():
-    lats = sorted(_METRICS["latencies_ms"])
+    with _metrics_lock:  # snapshot under lock to avoid sorting a list being appended to
+        lats = sorted(_METRICS["latencies_ms"])
+        m = dict(_METRICS); m.pop("latencies_ms", None)
     return {
-        "requests": _METRICS["requests"],
-        "refusals": _METRICS["refusals"],
-        "refusal_rate": round(_METRICS["refusals"] / _METRICS["requests"], 4) if _METRICS["requests"] else 0.0,
-        "errors": _METRICS["errors"],
+        "requests": m["requests"],
+        "refusals": m["refusals"],
+        "refusal_rate": round(m["refusals"] / m["requests"], 4) if m["requests"] else 0.0,
+        "errors": m["errors"],
         "p50_latency_ms": _pct(lats, 50),
         "p95_latency_ms": _pct(lats, 95),
-        "input_tokens": _METRICS["input_tokens"],
-        "output_tokens": _METRICS["output_tokens"],
-        "cost_usd": round(_METRICS["cost_usd"], 6),
+        "input_tokens": m["input_tokens"],
+        "output_tokens": m["output_tokens"],
+        "cost_usd": round(m["cost_usd"], 6),
         "cache": pipeline.cache.stats(),
     }
 
 
 def _record(resp) -> None:
-    _METRICS["requests"] += 1
-    if resp.refused:
-        _METRICS["refusals"] += 1
-    u = resp.usage or {}
-    _METRICS["input_tokens"] += u.get("input_tokens", 0)
-    _METRICS["output_tokens"] += u.get("output_tokens", 0)
-    _METRICS["cost_usd"] += u.get("cost_usd", 0.0)
-    lats = _METRICS["latencies_ms"]
-    lats.append(resp.latency_ms)
-    if len(lats) > _LAT_CAP:
-        del lats[: len(lats) - _LAT_CAP]
+    with _metrics_lock:
+        _METRICS["requests"] += 1
+        if resp.refused:
+            _METRICS["refusals"] += 1
+        u = resp.usage or {}
+        _METRICS["input_tokens"] += u.get("input_tokens", 0)
+        _METRICS["output_tokens"] += u.get("output_tokens", 0)
+        _METRICS["cost_usd"] += u.get("cost_usd", 0.0)
+        lats = _METRICS["latencies_ms"]
+        lats.append(resp.latency_ms)
+        if len(lats) > _LAT_CAP:
+            del lats[: len(lats) - _LAT_CAP]
 
 
 def _pct(sorted_vals: list[float], p: int) -> float:
